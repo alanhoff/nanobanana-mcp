@@ -5,9 +5,9 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
-  Tool,
-  CallToolRequest,
-  CallToolResult,
+  type Tool,
+  type CallToolRequest,
+  type CallToolResult,
   ErrorCode,
   McpError,
 } from "@modelcontextprotocol/sdk/types.js";
@@ -155,22 +155,22 @@ class NanoBananaMCP {
         switch (request.params.name) {
           case "configure_gemini_token":
             return await this.configureGeminiToken(request);
-          
+
           case "generate_image":
             return await this.generateImage(request);
-          
+
           case "edit_image":
             return await this.editImage(request);
-          
+
           case "get_configuration_status":
             return await this.getConfigurationStatus();
-          
+
           case "continue_editing":
             return await this.continueEditing(request);
-          
+
           case "get_last_image_info":
             return await this.getLastImageInfo();
-          
+
           default:
             throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${request.params.name}`);
         }
@@ -185,16 +185,16 @@ class NanoBananaMCP {
 
   private async configureGeminiToken(request: CallToolRequest): Promise<CallToolResult> {
     const { apiKey } = request.params.arguments as { apiKey: string };
-    
+
     try {
       ConfigSchema.parse({ geminiApiKey: apiKey });
-      
+
       this.config = { geminiApiKey: apiKey };
       this.genAI = new GoogleGenAI({ apiKey });
       this.configSource = 'config_file'; // Manual configuration via tool
-      
+
       await this.saveConfig();
-      
+
       return {
         content: [
           {
@@ -217,43 +217,43 @@ class NanoBananaMCP {
     }
 
     const { prompt } = request.params.arguments as { prompt: string };
-    
+
     try {
       const response = await this.genAI!.models.generateContent({
-        model: "gemini-2.5-flash-image-preview",
+        model: "gemini-3.1-flash-image-preview",
         contents: prompt,
       });
-      
+
       // Process response to extract image data
       const content: any[] = [];
       const savedFiles: string[] = [];
       let textContent = "";
-      
+
       // Get appropriate save directory based on OS
       const imagesDir = this.getImagesDirectory();
-      
+
       // Create directory
       await fs.mkdir(imagesDir, { recursive: true, mode: 0o755 });
-      
+
       if (response.candidates && response.candidates[0]?.content?.parts) {
         for (const part of response.candidates[0].content.parts) {
           // Process text content
           if (part.text) {
             textContent += part.text;
           }
-          
+
           // Process image data
           if (part.inlineData?.data) {
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
             const randomId = Math.random().toString(36).substring(2, 8);
             const fileName = `generated-${timestamp}-${randomId}.png`;
             const filePath = path.join(imagesDir, fileName);
-            
+
             const imageBuffer = Buffer.from(part.inlineData.data, 'base64');
             await fs.writeFile(filePath, imageBuffer);
             savedFiles.push(filePath);
             this.lastImagePath = filePath;
-            
+
             // Add image to MCP response
             content.push({
               type: "image",
@@ -263,14 +263,14 @@ class NanoBananaMCP {
           }
         }
       }
-      
+
       // Build response content
       let statusText = `🎨 Image generated with nano-banana (Gemini 2.5 Flash Image)!\n\nPrompt: "${prompt}"`;
-      
+
       if (textContent) {
         statusText += `\n\nDescription: ${textContent}`;
       }
-      
+
       if (savedFiles.length > 0) {
         statusText += `\n\n📁 Image saved to:\n${savedFiles.map(f => `- ${f}`).join('\n')}`;
         statusText += `\n\n💡 View the image by:`;
@@ -282,15 +282,15 @@ class NanoBananaMCP {
         statusText += `\n\nNote: No image was generated. The model may have returned only text.`;
         statusText += `\n\n💡 Tip: Try running the command again - sometimes the first call needs to warm up the model.`;
       }
-      
+
       // Add text content first
       content.unshift({
         type: "text",
         text: statusText,
       });
-      
+
       return { content };
-      
+
     } catch (error) {
       console.error("Error generating image:", error);
       throw new McpError(
@@ -305,28 +305,28 @@ class NanoBananaMCP {
       throw new McpError(ErrorCode.InvalidRequest, "Gemini API token not configured. Use configure_gemini_token first.");
     }
 
-    const { imagePath, prompt, referenceImages } = request.params.arguments as { 
-      imagePath: string; 
-      prompt: string; 
+    const { imagePath, prompt, referenceImages } = request.params.arguments as {
+      imagePath: string;
+      prompt: string;
       referenceImages?: string[];
     };
-    
+
     try {
       // Prepare the main image
       const imageBuffer = await fs.readFile(imagePath);
       const mimeType = this.getMimeType(imagePath);
       const imageBase64 = imageBuffer.toString('base64');
-      
+
       // Prepare all image parts
       const imageParts: any[] = [
-        { 
+        {
           inlineData: {
             data: imageBase64,
             mimeType: mimeType,
           }
         }
       ];
-      
+
       // Add reference images if provided
       if (referenceImages && referenceImages.length > 0) {
         for (const refPath of referenceImages) {
@@ -334,7 +334,7 @@ class NanoBananaMCP {
             const refBuffer = await fs.readFile(refPath);
             const refMimeType = this.getMimeType(refPath);
             const refBase64 = refBuffer.toString('base64');
-            
+
             imageParts.push({
               inlineData: {
                 data: refBase64,
@@ -347,50 +347,50 @@ class NanoBananaMCP {
           }
         }
       }
-      
+
       // Add the text prompt
       imageParts.push({ text: prompt });
-      
+
       // Use new API format with multiple images and text
       const response = await this.genAI!.models.generateContent({
-        model: "gemini-2.5-flash-image-preview",
+        model: "gemini-3.1-flash-image-preview",
         contents: [
           {
             parts: imageParts
           }
         ],
       });
-      
+
       // Process response
       const content: any[] = [];
       const savedFiles: string[] = [];
       let textContent = "";
-      
+
       // Get appropriate save directory
       const imagesDir = this.getImagesDirectory();
       await fs.mkdir(imagesDir, { recursive: true, mode: 0o755 });
-      
+
       // Extract image from response
       if (response.candidates && response.candidates[0]?.content?.parts) {
         for (const part of response.candidates[0].content.parts) {
           if (part.text) {
             textContent += part.text;
           }
-          
+
           if (part.inlineData) {
             // Save edited image
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
             const randomId = Math.random().toString(36).substring(2, 8);
             const fileName = `edited-${timestamp}-${randomId}.png`;
             const filePath = path.join(imagesDir, fileName);
-            
+
             if (part.inlineData.data) {
               const imageBuffer = Buffer.from(part.inlineData.data, 'base64');
               await fs.writeFile(filePath, imageBuffer);
               savedFiles.push(filePath);
               this.lastImagePath = filePath;
             }
-            
+
             // Add to MCP response
             if (part.inlineData.data) {
               content.push({
@@ -402,18 +402,18 @@ class NanoBananaMCP {
           }
         }
       }
-      
+
       // Build response
       let statusText = `🎨 Image edited with nano-banana!\n\nOriginal: ${imagePath}\nEdit prompt: "${prompt}"`;
-      
+
       if (referenceImages && referenceImages.length > 0) {
         statusText += `\n\nReference images used:\n${referenceImages.map(f => `- ${f}`).join('\n')}`;
       }
-      
+
       if (textContent) {
         statusText += `\n\nDescription: ${textContent}`;
       }
-      
+
       if (savedFiles.length > 0) {
         statusText += `\n\n📁 Edited image saved to:\n${savedFiles.map(f => `- ${f}`).join('\n')}`;
         statusText += `\n\n💡 View the edited image by:`;
@@ -425,14 +425,14 @@ class NanoBananaMCP {
         statusText += `\n\nNote: No edited image was generated.`;
         statusText += `\n\n💡 Tip: Try running the command again - sometimes the first call needs to warm up the model.`;
       }
-      
+
       content.unshift({
         type: "text",
         text: statusText,
       });
-      
+
       return { content };
-      
+
     } catch (error) {
       throw new McpError(
         ErrorCode.InternalError,
@@ -443,13 +443,13 @@ class NanoBananaMCP {
 
   private async getConfigurationStatus(): Promise<CallToolResult> {
     const isConfigured = this.config !== null && this.genAI !== null;
-    
+
     let statusText: string;
     let sourceInfo = "";
-    
+
     if (isConfigured) {
       statusText = "✅ Gemini API token is configured and ready to use";
-      
+
       switch (this.configSource) {
         case 'environment':
           sourceInfo = "\n📍 Source: Environment variable (GEMINI_API_KEY)\n💡 This is the most secure configuration method.";
@@ -464,13 +464,13 @@ class NanoBananaMCP {
 
 📝 Configuration options (in priority order):
 1. 🥇 MCP client environment variables (Recommended)
-2. 🥈 System environment variable: GEMINI_API_KEY  
+2. 🥈 System environment variable: GEMINI_API_KEY
 3. 🥉 Use configure_gemini_token tool
 
 💡 For the most secure setup, add this to your MCP configuration:
 "env": { "GEMINI_API_KEY": "your-api-key-here" }`;
     }
-    
+
     return {
       content: [
         {
@@ -490,8 +490,8 @@ class NanoBananaMCP {
       throw new McpError(ErrorCode.InvalidRequest, "No previous image found. Please generate or edit an image first, then use continue_editing for subsequent edits.");
     }
 
-    const { prompt, referenceImages } = request.params.arguments as { 
-      prompt: string; 
+    const { prompt, referenceImages } = request.params.arguments as {
+      prompt: string;
       referenceImages?: string[];
     };
 
@@ -503,7 +503,7 @@ class NanoBananaMCP {
     }
 
     // Use editImage logic with lastImagePath
-    
+
     return await this.editImage({
       method: "tools/call",
       params: {
@@ -533,7 +533,7 @@ class NanoBananaMCP {
     try {
       await fs.access(this.lastImagePath);
       const stats = await fs.stat(this.lastImagePath);
-      
+
       return {
         content: [
           {
@@ -575,7 +575,7 @@ class NanoBananaMCP {
 
   private getImagesDirectory(): string {
     const platform = os.platform();
-    
+
     if (platform === 'win32') {
       // Windows: Use Documents folder
       const homeDir = os.homedir();
@@ -584,12 +584,12 @@ class NanoBananaMCP {
       // macOS/Linux: Use current directory or home directory if in system paths
       const cwd = process.cwd();
       const homeDir = os.homedir();
-      
+
       // If in system directories, use home directory instead
       if (cwd.startsWith('/usr/') || cwd.startsWith('/opt/') || cwd.startsWith('/var/')) {
         return path.join(homeDir, 'nano-banana-images');
       }
-      
+
       return path.join(cwd, 'generated_imgs');
     }
   }
@@ -614,13 +614,13 @@ class NanoBananaMCP {
         // Invalid API key in environment
       }
     }
-    
+
     // Fallback to config file
     try {
       const configPath = path.join(process.cwd(), '.nano-banana-config.json');
       const configData = await fs.readFile(configPath, 'utf-8');
       const parsedConfig = JSON.parse(configData);
-      
+
       this.config = ConfigSchema.parse(parsedConfig);
       this.genAI = new GoogleGenAI({ apiKey: this.config.geminiApiKey });
       this.configSource = 'config_file';
@@ -632,7 +632,7 @@ class NanoBananaMCP {
 
   public async run(): Promise<void> {
     await this.loadConfig();
-    
+
     const transport = new StdioServerTransport();
     await this.server.connect(transport);
   }

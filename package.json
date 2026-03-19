@@ -4,9 +4,7 @@
   "description": "MCP server for Google's Gemini 2.5 Flash Image generation API with cross-platform support",
   "main": "dist/index.js",
   "type": "module",
-  "bin": {
-    "nano-banana-mcp": "./dist/index.js"
-  },
+  "bin": "./start",
   "files": [
     "dist/",
     "README.md",
@@ -14,7 +12,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "./start",
     "dev": "tsx src/index.ts",
     "test": "jest",
     "lint": "eslint src/**/*.ts",
@@ -43,7 +41,7 @@
     "url": "https://github.com/ConechoAI/Nano-Banana-MCP/issues"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=24.0.0"
   },
   "dependencies": {
     "@google/genai": "^1.16.0",

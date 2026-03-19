@@ -1,0 +1,5 @@
+#!/usr/bin/env -S node --no-warnings --experimental-transform-types
+
+process.chdir(import.meta.dirname);
+
+await import('./src/index.ts');
