@@ -6,7 +6,9 @@
   "type": "module",
   "bin": "./start",
   "files": [
+    "src/",
     "dist/",
+    "start",
     "README.md",
     "LICENSE"
   ],
